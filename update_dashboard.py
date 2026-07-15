@@ -27,7 +27,7 @@ TIMEZONE = "America/El_Salvador"
 FORECAST_URL = (
     "https://api.open-meteo.com/v1/forecast"
     f"?latitude={LAT}&longitude={LON}"
-    "&hourly=wind_speed_10m,wind_gusts_10m,precipitation"
+    "&hourly=wind_speed_10m,wind_gusts_10m,precipitation,cape"
     "&daily=wind_speed_10m_max,wind_gusts_10m_max,precipitation_sum"
     f"&timezone={TIMEZONE}&forecast_days=10&wind_speed_unit=kmh"
 )
@@ -75,8 +75,23 @@ def main():
     archive = fetch_with_retries(ARCHIVE_URL, "historico")
 
     # El template solo necesita el bloque "daily" de cada respuesta
-    forecast_payload = {"daily": forecast["daily"]}
+    forecast_payload = {"daily": dict(forecast["daily"])}
     climate_payload = {"daily": archive["daily"]}
+
+    # CAPE viene por hora; calculamos el maximo diario y lo anexamos como
+    # "cape_max" alineado con las fechas de forecast_payload["daily"]["time"]
+    hourly_time = forecast["hourly"]["time"]
+    hourly_cape = forecast["hourly"]["cape"]
+    cape_by_date = {}
+    for t, v in zip(hourly_time, hourly_cape):
+        date_key = t.split("T")[0]
+        if v is None:
+            continue
+        cape_by_date[date_key] = max(cape_by_date.get(date_key, 0), v)
+
+    forecast_payload["daily"]["cape_max"] = [
+        cape_by_date.get(d, None) for d in forecast_payload["daily"]["time"]
+    ]
 
     build_dt = datetime.now(ZoneInfo(TIMEZONE))
     build_timestamp = build_dt.strftime("%Y-%m-%d %H:%M %Z")
