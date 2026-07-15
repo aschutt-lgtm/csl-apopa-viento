@@ -13,6 +13,7 @@ fallido en vez de publicar una página rota.
 """
 
 import json
+import math
 import sys
 import time
 from datetime import datetime, timezone
@@ -45,6 +46,8 @@ ARCHIVE_URL = (
 TEMPLATE_PATH = "template.html"
 OUTPUT_PATH = "csl_apopa_viento.html"
 
+SNET_METAR_URL = "https://snet.gob.sv/meteorologia/metar/metarjson.php"
+
 MAX_RETRIES = 5
 RETRY_WAIT_SECONDS = 60
 
@@ -67,12 +70,75 @@ def fetch_with_retries(url, label):
     raise RuntimeError(f"[{label}] no se pudo obtener datos tras {MAX_RETRIES} intentos: {last_error}")
 
 
+def haversine_km(lat1, lon1, lat2, lon2):
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def fetch_nearest_snet_station():
+    """Consulta la red de estaciones automaticas de MARN/DGOA (SNET) y
+    devuelve la estacion mas cercana a CSL Apopa. No reintenta tan
+    agresivo como el pronostico: si falla, el dashboard sigue funcionando
+    sin este panel (es un dato complementario, no critico)."""
+    try:
+        resp = requests.get(SNET_METAR_URL, timeout=20)
+        resp.raise_for_status()
+        stations = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[snet] no se pudo obtener la red de estaciones: {exc}")
+        return None
+
+    best = None
+    best_dist = None
+    for s in stations:
+        try:
+            lat = float(s["latitud"])
+            lon = float(s["longitud"])
+            vel = s.get("velocidad", "")
+            if vel in (None, ""):
+                continue  # estacion sin dato de viento en este momento
+        except (KeyError, ValueError, TypeError):
+            continue
+        dist = haversine_km(LAT, LON, lat, lon)
+        if best_dist is None or dist < best_dist:
+            best_dist = dist
+            best = s
+
+    if best is None:
+        print("[snet] ninguna estacion con dato de viento disponible ahora mismo")
+        return None
+
+    direction_raw = ""
+    try:
+        direction_raw = best.get("dirviento", "").rstrip("/").split("/")[-1].replace(".png", "")
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "distance_km": round(best_dist, 1),
+        "lat": float(best["latitud"]),
+        "lon": float(best["longitud"]),
+        "wind_speed": best.get("velocidad", ""),
+        "direction": direction_raw.upper(),
+        "temperature": best.get("temperatura", ""),
+        "humidity": best.get("humedad", ""),
+        "station_time": best.get("hora", ""),
+    }
+
+
 def main():
     print("Consultando pronostico Open-Meteo (10 dias)...")
     forecast = fetch_with_retries(FORECAST_URL, "pronostico")
 
     print("Consultando archivo historico Open-Meteo (2015-2024)...")
     archive = fetch_with_retries(ARCHIVE_URL, "historico")
+
+    print("Consultando red de estaciones MARN/DGOA (SNET)...")
+    snet_station = fetch_nearest_snet_station()
 
     # El template solo necesita el bloque "daily" de cada respuesta
     forecast_payload = {"daily": dict(forecast["daily"])}
@@ -101,6 +167,7 @@ def main():
 
     html = html.replace("__FORECAST_JSON__", json.dumps(forecast_payload))
     html = html.replace("__CLIMATE_JSON__", json.dumps(climate_payload))
+    html = html.replace("__SNET_JSON__", json.dumps(snet_station))
     html = html.replace("__BUILD_TIMESTAMP__", build_timestamp)
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:

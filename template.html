@@ -101,6 +101,9 @@
   .incident-row:last-child{border-bottom:none;}
   .incident-date{font-family:var(--mono); font-weight:700; font-size:14px;}
   .incident-vals{font-family:var(--mono); font-size:12px; color:var(--ink-muted);}
+  .snet-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:16px;}
+  .snet-stat .v{font-family:var(--mono); font-size:20px; font-weight:700;}
+  .snet-stat .l{font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;}
 </style>
 </head>
 <body>
@@ -195,6 +198,13 @@
 </section>
 
 <section>
+  <p class="eyebrow">Estación más cercana — MARN / DGOA (SNET)</p>
+  <div class="card">
+    <div id="snetBody"></div>
+  </div>
+</section>
+
+<section>
   <p class="eyebrow">Percances registrados en sitio</p>
   <div class="card">
     <div id="incidentsBody"></div>
@@ -205,7 +215,10 @@
 <footer>
   CSL Apopa es un activo operado y arrendado por Grupo Logístico Mesoamérica, S.A. (GLM) a Productos Alimenticios Diana ·
   Fuentes: pronóstico y archivo climático Open-Meteo (ECMWF/ERA5-Land) · 13.784°N, -89.195°W, Apopa, El Salvador ·
-  Alertas regionales oficiales: Dirección General del Observatorio de Amenazas de El Salvador (snet.gob.sv) y NOAA/NHC para sistemas del Pacífico ·
+  Alertas regionales oficiales: Dirección General del Observatorio de Amenazas de El Salvador
+  (<a href="https://www.snet.gob.sv/ver/riesgo/ultimos+informes+y+avisos/" style="color:inherit;">Informes y Avisos</a> ·
+  <a href="https://www.snet.gob.sv/googlemaps/radares/radaresSV8.php" style="color:inherit;">Radar en vivo</a>)
+  y NOAA/NHC para sistemas del Pacífico ·
   Actualización automática diaria vía GitHub Actions · Sin sensor físico en sitio todavía: capa de anemómetro en techo pendiente de instalación.
 </footer>
 
@@ -217,6 +230,7 @@
 // ---------------------------------------------------------------
 const FORECAST_DATA = __FORECAST_JSON__;
 const CLIMATE_DATA = __CLIMATE_JSON__;
+const SNET_DATA = __SNET_JSON__;
 const BUILD_TIMESTAMP = "__BUILD_TIMESTAMP__";
 
 // ---------------------------------------------------------------
@@ -444,9 +458,31 @@ function renderIncidents(){
   document.getElementById("incidentsNote").innerHTML = `<b>Advertencia:</b> ${CONFIG.incidentsNote}`;
 }
 
+function renderSnet(){
+  const body = document.getElementById("snetBody");
+  if(!SNET_DATA){
+    body.innerHTML = "<div class='loading'>Estación no disponible en este momento (fuente externa MARN/DGOA sin respuesta al momento del último build).</div>";
+    return;
+  }
+  const d = SNET_DATA;
+  body.innerHTML = `
+    <div class="snet-grid">
+      <div class="snet-stat"><div class="v">${d.wind_speed} km/h</div><div class="l">Viento sostenido</div></div>
+      <div class="snet-stat"><div class="v">${d.direction || "—"}</div><div class="l">Dirección</div></div>
+      <div class="snet-stat"><div class="v">${d.temperature}°C</div><div class="l">Temperatura</div></div>
+      <div class="snet-stat"><div class="v">${d.humidity}%</div><div class="l">Humedad</div></div>
+      <div class="snet-stat"><div class="v">${d.distance_km} km</div><div class="l">Distancia a CSL Apopa</div></div>
+      <div class="snet-stat"><div class="v">${d.station_time}</div><div class="l">Hora estación (local)</div></div>
+    </div>
+    <div class="config-note" style="margin-top:16px;">
+      <b>Dato real, no modelado</b> — viene de la red de estaciones automáticas de MARN/DGOA (antes SNET), la estación operativa más cercana al sitio. Es viento <i>sostenido</i>, no incluye ráfaga, y la estación está a ${d.distance_km} km — útil como referencia cruzada independiente del modelo, no como sustituto del sensor en sitio.
+    </div>`;
+}
+
 try{ loadForecast(); }catch(e){ document.getElementById("calRow").innerHTML = "<div class='loading'>Error al procesar pronóstico: "+e.message+"</div>"; }
 try{ loadClimate(); }catch(e){ document.getElementById("climateBody").innerHTML = "<tr><td colspan='4' class='loading'>Error al procesar histórico: "+e.message+"</td></tr>"; }
 try{ renderIncidents(); }catch(e){ document.getElementById("incidentsBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
+try{ renderSnet(); }catch(e){ document.getElementById("snetBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
 </script>
 </body>
 </html>
