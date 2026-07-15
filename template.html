@@ -104,6 +104,9 @@
   .snet-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:16px;}
   .snet-stat .v{font-family:var(--mono); font-size:20px; font-weight:700;}
   .snet-stat .l{font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;}
+  .peak-row{display:grid; grid-template-columns:130px 1fr 100px; gap:14px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); font-family:var(--mono); font-size:13px;}
+  .peak-row:last-child{border-bottom:none;}
+  .peak-rank{color:var(--ink-muted); font-size:11px;}
 </style>
 </head>
 <body>
@@ -182,7 +185,7 @@
 </section>
 
 <section>
-  <p class="eyebrow">Registro histórico de viento — promedio mensual (2015-2024)</p>
+  <p class="eyebrow">Promedio histórico de largo plazo (2015-2024)</p>
   <div class="card">
     <canvas id="climateChart" style="max-height:260px;"></canvas>
     <table id="climateTable">
@@ -194,6 +197,20 @@
     <div class="legend">
       <span>⚠ = mes con mayor incidencia histórica de temporales / tormenta tropical en el Pacífico centroamericano</span>
     </div>
+    <div class="config-note" style="margin-top:16px;">
+      <b>Nota:</b> esta es una vista de <i>promedios</i> mensuales sobre 10 años — por diseño, aplana los picos de días individuales. Para eso está la sección siguiente.
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Picos recientes — últimos 18 meses (sin promediar)</p>
+  <div class="card">
+    <canvas id="recentChart" style="max-height:260px;"></canvas>
+    <div class="legend" style="margin-top:8px;">
+      <span>Muestra el <b>máximo</b> de cada mes, no el promedio — así los eventos puntuales quedan visibles en vez de diluidos.</span>
+    </div>
+    <div id="recentTopBody" style="margin-top:20px;"></div>
   </div>
 </section>
 
@@ -230,6 +247,7 @@
 // ---------------------------------------------------------------
 const FORECAST_DATA = __FORECAST_JSON__;
 const CLIMATE_DATA = __CLIMATE_JSON__;
+const RECENT_DATA = __RECENT_JSON__;
 const SNET_DATA = __SNET_JSON__;
 const BUILD_TIMESTAMP = "__BUILD_TIMESTAMP__";
 
@@ -458,6 +476,57 @@ function renderIncidents(){
   document.getElementById("incidentsNote").innerHTML = `<b>Advertencia:</b> ${CONFIG.incidentsNote}`;
 }
 
+function loadRecentRecord(){
+  const data = RECENT_DATA;
+  const time = data.daily.time;
+  const gust = data.daily.wind_gusts_10m_max;
+  const sust = data.daily.wind_speed_10m_max;
+  const rain = data.daily.precipitation_sum;
+
+  // Agrupar por mes-anio, tomando el MAXIMO (no promedio) de cada mes
+  const byMonth = {}; // key "2026-07" -> {gustMax, sustMax, rainMax, order}
+  time.forEach((d,i)=>{
+    const key = d.slice(0,7);
+    if(!byMonth[key]) byMonth[key] = {gustMax:0, sustMax:0, rainMax:0};
+    byMonth[key].gustMax = Math.max(byMonth[key].gustMax, gust[i]);
+    byMonth[key].sustMax = Math.max(byMonth[key].sustMax, sust[i]);
+    byMonth[key].rainMax = Math.max(byMonth[key].rainMax, rain[i]);
+  });
+  const keys = Object.keys(byMonth).sort();
+  const labels = keys.map(k=>{
+    const [y,m] = k.split("-");
+    return monthsEs[parseInt(m,10)-1].slice(0,3)+" "+y.slice(2);
+  });
+
+  new Chart(document.getElementById("recentChart"), {
+    type:"bar",
+    data:{
+      labels,
+      datasets:[
+        {label:"Ráfaga máx. del mes", data:keys.map(k=>byMonth[k].gustMax), backgroundColor:"#B23B2E"},
+        {label:"Sostenido máx. del mes", data:keys.map(k=>byMonth[k].sustMax), backgroundColor:"#C9C5B7"}
+      ]
+    },
+    options:{ scales:{ y:{ title:{display:true, text:"km/h"} } } }
+  });
+
+  // Top 10 dias individuales con mayor rafaga en la ventana de 18 meses
+  const days = time.map((d,i)=>({date:d, gust:gust[i], sust:sust[i], rain:rain[i]}));
+  days.sort((a,b)=> b.gust - a.gust);
+  const top = days.slice(0,10);
+  const body = document.getElementById("recentTopBody");
+  body.innerHTML = `<div style="font-family:var(--disp); text-transform:uppercase; font-size:12px; color:var(--ink-muted); margin-bottom:8px;">Top 10 días con mayor ráfaga modelada (18 meses)</div>` +
+    top.map((d,i)=>{
+      const dt = new Date(d.date+"T00:00:00");
+      const label = dt.toLocaleDateString("es-GT",{weekday:"short", day:"numeric", month:"short", year:"numeric"});
+      return `<div class="peak-row">
+        <div class="peak-rank">#${i+1}</div>
+        <div>${label}</div>
+        <div style="text-align:right; font-weight:700;">${d.gust.toFixed(0)} km/h</div>
+      </div>`;
+    }).join("");
+}
+
 function renderSnet(){
   const body = document.getElementById("snetBody");
   if(!SNET_DATA){
@@ -481,6 +550,7 @@ function renderSnet(){
 
 try{ loadForecast(); }catch(e){ document.getElementById("calRow").innerHTML = "<div class='loading'>Error al procesar pronóstico: "+e.message+"</div>"; }
 try{ loadClimate(); }catch(e){ document.getElementById("climateBody").innerHTML = "<tr><td colspan='4' class='loading'>Error al procesar histórico: "+e.message+"</td></tr>"; }
+try{ loadRecentRecord(); }catch(e){ document.getElementById("recentTopBody").innerHTML = "<div class='loading'>Error al procesar picos recientes: "+e.message+"</div>"; }
 try{ renderIncidents(); }catch(e){ document.getElementById("incidentsBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
 try{ renderSnet(); }catch(e){ document.getElementById("snetBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
 </script>

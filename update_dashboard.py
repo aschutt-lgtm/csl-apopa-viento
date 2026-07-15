@@ -16,7 +16,7 @@ import json
 import math
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -34,11 +34,14 @@ FORECAST_URL = (
 )
 
 ARCHIVE_START = "2015-01-01"
-ARCHIVE_END = "2024-12-31"
-ARCHIVE_URL = (
+# El archivo ERA5-Land tiene un rezago de unos dias; pedimos hasta hace 5 dias
+# para evitar huecos de datos aun no consolidados.
+ARCHIVE_LAG_DAYS = 5
+RECENT_WINDOW_DAYS = 548  # ~18 meses
+ARCHIVE_URL_TEMPLATE = (
     "https://archive-api.open-meteo.com/v1/archive"
     f"?latitude={LAT}&longitude={LON}"
-    f"&start_date={ARCHIVE_START}&end_date={ARCHIVE_END}"
+    "&start_date={start}&end_date={end}"
     "&daily=wind_speed_10m_max,wind_gusts_10m_max,precipitation_sum"
     f"&timezone={TIMEZONE}"
 )
@@ -134,15 +137,44 @@ def main():
     print("Consultando pronostico Open-Meteo (10 dias)...")
     forecast = fetch_with_retries(FORECAST_URL, "pronostico")
 
-    print("Consultando archivo historico Open-Meteo (2015-2024)...")
-    archive = fetch_with_retries(ARCHIVE_URL, "historico")
+    today = datetime.now(ZoneInfo(TIMEZONE)).date()
+    archive_end = today - timedelta(days=ARCHIVE_LAG_DAYS)
+    archive_url = ARCHIVE_URL_TEMPLATE.format(start=ARCHIVE_START, end=archive_end.isoformat())
+
+    print(f"Consultando archivo historico Open-Meteo ({ARCHIVE_START} a {archive_end})...")
+    archive = fetch_with_retries(archive_url, "historico")
 
     print("Consultando red de estaciones MARN/DGOA (SNET)...")
     snet_station = fetch_nearest_snet_station()
 
-    # El template solo necesita el bloque "daily" de cada respuesta
+    # El template solo necesita el bloque "daily" de cada respuesta.
+    # Dataset A: 2015-2024 completo, para el promedio historico de largo plazo
+    # (se sigue usando tal cual, sin importar la fecha de hoy).
+    full_time = archive["daily"]["time"]
+    cutoff_10yr = "2025-01-01"
+    idx_10yr = [i for i, t in enumerate(full_time) if t < cutoff_10yr]
+    climate_payload = {
+        "daily": {
+            "time": [full_time[i] for i in idx_10yr],
+            "wind_speed_10m_max": [archive["daily"]["wind_speed_10m_max"][i] for i in idx_10yr],
+            "wind_gusts_10m_max": [archive["daily"]["wind_gusts_10m_max"][i] for i in idx_10yr],
+            "precipitation_sum": [archive["daily"]["precipitation_sum"][i] for i in idx_10yr],
+        }
+    }
+
+    # Dataset B: ultimos ~18 meses completos, para ver picos (no promedios)
+    recent_cutoff = (archive_end - timedelta(days=RECENT_WINDOW_DAYS)).isoformat()
+    idx_recent = [i for i, t in enumerate(full_time) if t >= recent_cutoff]
+    recent_payload = {
+        "daily": {
+            "time": [full_time[i] for i in idx_recent],
+            "wind_speed_10m_max": [archive["daily"]["wind_speed_10m_max"][i] for i in idx_recent],
+            "wind_gusts_10m_max": [archive["daily"]["wind_gusts_10m_max"][i] for i in idx_recent],
+            "precipitation_sum": [archive["daily"]["precipitation_sum"][i] for i in idx_recent],
+        }
+    }
+
     forecast_payload = {"daily": dict(forecast["daily"])}
-    climate_payload = {"daily": archive["daily"]}
 
     # CAPE viene por hora; calculamos el maximo diario y lo anexamos como
     # "cape_max" alineado con las fechas de forecast_payload["daily"]["time"]
@@ -167,6 +199,7 @@ def main():
 
     html = html.replace("__FORECAST_JSON__", json.dumps(forecast_payload))
     html = html.replace("__CLIMATE_JSON__", json.dumps(climate_payload))
+    html = html.replace("__RECENT_JSON__", json.dumps(recent_payload))
     html = html.replace("__SNET_JSON__", json.dumps(snet_station))
     html = html.replace("__BUILD_TIMESTAMP__", build_timestamp)
 
