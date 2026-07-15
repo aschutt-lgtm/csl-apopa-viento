@@ -94,6 +94,20 @@
   canvas{max-height:320px;}
   footer{margin-top:50px; border-top:1px solid var(--line); padding-top:16px; font-size:11px; color:var(--ink-muted); font-family:var(--mono);}
   .loading{font-family:var(--mono); font-size:12px; color:var(--ink-muted);}
+  @media (max-width:480px){
+    .hero-stats{grid-template-columns:1fr 1fr;}
+    .incident-row{grid-template-columns:1fr;}
+    .peak-row{grid-template-columns:1fr; gap:2px;}
+    .peak-rank{display:none;}
+    table{font-size:12px;}
+    th,td{padding:6px 4px;}
+    .mast .meta{text-align:left;}
+  }
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .stale-banner{
+    background:var(--danger); color:#fff; font-family:var(--disp); text-transform:uppercase;
+    letter-spacing:0.5px; font-size:13px; text-align:center; padding:10px; margin-top:16px; border-radius:3px;
+  }
   .incident-row{
     display:grid; grid-template-columns:130px 1fr; gap:14px; align-items:center;
     padding:10px 0; border-bottom:1px solid var(--line);
@@ -116,13 +130,16 @@
   <div>
     <h1>CSL Apopa · Riesgo de viento</h1>
     <div class="sub">Centro de distribución arrendado a Productos Alimenticios Diana · Apopa, El Salvador</div>
-    <div class="owner">Activo propiedad de Grupo Logístico Mesoamérica, S.A.</div>
+    <div class="sub" style="margin-top:2px;">CSL = Centro de Servicio Logístico</div>
+    <div class="owner">Activo operado por Grupo Logístico Mesoamérica, S.A. (GLM)</div>
   </div>
   <div class="meta">
     13.784° N, -89.195° W<br>
     <span id="lastUpdate">cargando…</span>
   </div>
 </header>
+
+<div id="staleBanner" style="display:none;"></div>
 
 <section>
   <p class="eyebrow">Estado actual</p>
@@ -188,12 +205,14 @@
   <p class="eyebrow">Promedio histórico de largo plazo (2015-2024)</p>
   <div class="card">
     <canvas id="climateChart" style="max-height:260px;"></canvas>
+    <div class="table-scroll">
     <table id="climateTable">
       <thead>
         <tr><th>Mes</th><th>Sostenido máx (km/h)</th><th>Ráfaga máx (km/h)</th><th>Lluvia (mm)</th></tr>
       </thead>
       <tbody id="climateBody"><tr><td colspan="4" class="loading">Cargando histórico…</td></tr></tbody>
     </table>
+    </div>
     <div class="legend">
       <span>⚠ = mes con mayor incidencia histórica de temporales / tormenta tropical en el Pacífico centroamericano</span>
     </div>
@@ -230,7 +249,9 @@
 </section>
 
 <footer>
-  CSL Apopa es un activo operado y arrendado por Grupo Logístico Mesoamérica, S.A. (GLM) a Productos Alimenticios Diana ·
+  CSL Apopa es un activo operado por Grupo Logístico Mesoamérica, S.A. (GLM) de forma directa e indirecta a través de sus subsidiarias y/o afiliadas.
+  El activo es propiedad de FONDO DE TITULARIZACIÓN DE INMUEBLES HENCORP VALORES CENTRO DE DISTRIBUCIÓN DOS, un vehículo de propiedad absoluta de GLM,
+  cuyo único tenedor de valores es S&amp;D Inversiones, S.A., subsidiaria de propiedad absoluta de GLM. Arrendado a Productos Alimenticios Diana ·
   Fuentes: pronóstico y archivo climático Open-Meteo (ECMWF/ERA5-Land) · 13.784°N, -89.195°W, Apopa, El Salvador ·
   Alertas regionales oficiales: Dirección General del Observatorio de Amenazas de El Salvador
   (<a href="https://www.snet.gob.sv/ver/riesgo/ultimos+informes+y+avisos/" style="color:inherit;">Informes y Avisos</a> ·
@@ -250,6 +271,7 @@ const CLIMATE_DATA = __CLIMATE_JSON__;
 const RECENT_DATA = __RECENT_JSON__;
 const SNET_DATA = __SNET_JSON__;
 const BUILD_TIMESTAMP = "__BUILD_TIMESTAMP__";
+const BUILD_ISO = "__BUILD_ISO__";
 
 // ---------------------------------------------------------------
 // CONFIGURACIÓN — AJUSTAR AQUÍ cuando se tenga el dato verificado
@@ -548,11 +570,25 @@ function renderSnet(){
     </div>`;
 }
 
+function checkStaleness(){
+  try{
+    const buildDate = new Date(BUILD_ISO);
+    const hoursSince = (Date.now() - buildDate.getTime()) / 3600000;
+    if(hoursSince > 30){
+      const el = document.getElementById("staleBanner");
+      el.style.display = "block";
+      el.className = "stale-banner";
+      el.textContent = `⚠ Este panel no se ha actualizado en ${Math.floor(hoursSince)} horas — verificar conexión antes de confiar en los datos`;
+    }
+  }catch(e){ /* si falla el chequeo, no bloquea el resto del panel */ }
+}
+
 try{ loadForecast(); }catch(e){ document.getElementById("calRow").innerHTML = "<div class='loading'>Error al procesar pronóstico: "+e.message+"</div>"; }
 try{ loadClimate(); }catch(e){ document.getElementById("climateBody").innerHTML = "<tr><td colspan='4' class='loading'>Error al procesar histórico: "+e.message+"</td></tr>"; }
 try{ loadRecentRecord(); }catch(e){ document.getElementById("recentTopBody").innerHTML = "<div class='loading'>Error al procesar picos recientes: "+e.message+"</div>"; }
 try{ renderIncidents(); }catch(e){ document.getElementById("incidentsBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
 try{ renderSnet(); }catch(e){ document.getElementById("snetBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
+checkStaleness();
 </script>
 </body>
 </html>
