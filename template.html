@@ -94,6 +94,13 @@
   canvas{max-height:320px;}
   footer{margin-top:50px; border-top:1px solid var(--line); padding-top:16px; font-size:11px; color:var(--ink-muted); font-family:var(--mono);}
   .loading{font-family:var(--mono); font-size:12px; color:var(--ink-muted);}
+  .incident-row{
+    display:grid; grid-template-columns:130px 1fr; gap:14px; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--line);
+  }
+  .incident-row:last-child{border-bottom:none;}
+  .incident-date{font-family:var(--mono); font-weight:700; font-size:14px;}
+  .incident-vals{font-family:var(--mono); font-size:12px; color:var(--ink-muted);}
 </style>
 </head>
 <body>
@@ -181,6 +188,14 @@
   </div>
 </section>
 
+<section>
+  <p class="eyebrow">Percances registrados en sitio</p>
+  <div class="card">
+    <div id="incidentsBody"></div>
+    <div class="config-note" id="incidentsNote" style="margin-top:16px;"></div>
+  </div>
+</section>
+
 <footer>
   CSL Apopa es un activo operado y arrendado por Grupo Logístico Mesoamérica, S.A. (GLM) a Productos Alimenticios Diana ·
   Fuentes: pronóstico y archivo climático Open-Meteo (ECMWF/ERA5-Land) · 13.784°N, -89.195°W, Apopa, El Salvador ·
@@ -208,9 +223,14 @@ const CONFIG = {
   // Velocidad de diseño de la cubierta actual (km/h, ráfaga sostenida equivalente).
   // VALOR PLACEHOLDER: reemplazar con el dato del ingeniero estructural / fabricante de lámina.
   designWindKmh: 130,
-  // Fechas de los 3 percances históricos, para marcarlos en el gráfico una vez se tengan.
-  // Ejemplo: { date: "2025-09-14", label: "Percance 1 - desprendimiento lámina bodega 3" }
-  knownIncidents: []
+  // Fechas de los 3 percances históricos, con el dato de viento modelado (ERA5-Land) de ese día.
+  // NOTA: el valor modelado subestima el evento real — ver advertencia en incidentsNote.
+  knownIncidents: [
+    { date: "2025-07-18", gustModeled: 32.8, sustModeled: 9.6, rainModeled: 1.3 },
+    { date: "2026-06-26", gustModeled: 31.0, sustModeled: 8.5, rainModeled: 4.0 },
+    { date: "2026-07-10", gustModeled: 42.8, sustModeled: 9.3, rainModeled: 5.4 }
+  ],
+  incidentsNote: "Los valores de ráfaga mostrados vienen del modelo climático ERA5-Land (resolución ~9-25km) y en los tres casos coinciden con tormenta convectiva local (ráfaga descendente / reventazón). Ese tipo de evento es hiperlocalizado y de minutos de duración — el modelo lo suaviza y por eso el valor mostrado es significativamente menor al que probablemente ocurrió sobre la cubierta. No usar estos valores para calibrar el umbral de diseño; son un registro de fecha/contexto, no una medición del evento real."
 };
 
 const monthsEs = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -384,8 +404,28 @@ function loadClimate(){
   });
 }
 
+function renderIncidents(){
+  const body = document.getElementById("incidentsBody");
+  if(!CONFIG.knownIncidents || CONFIG.knownIncidents.length===0){
+    body.innerHTML = "<div class='loading'>Sin percances registrados todavía.</div>";
+    document.getElementById("incidentsNote").style.display = "none";
+    return;
+  }
+  const sorted = [...CONFIG.knownIncidents].sort((a,b)=> a.date < b.date ? 1 : -1);
+  body.innerHTML = sorted.map(inc=>{
+    const dt = new Date(inc.date+"T00:00:00");
+    const label = dt.toLocaleDateString("es-GT",{weekday:"long", day:"numeric", month:"long", year:"numeric"});
+    return `<div class="incident-row">
+      <div class="incident-date">${label.charAt(0).toUpperCase()+label.slice(1)}</div>
+      <div class="incident-vals">Ráfaga modelada: ${inc.gustModeled} km/h · Sostenido: ${inc.sustModeled} km/h · Lluvia: ${inc.rainModeled} mm</div>
+    </div>`;
+  }).join("");
+  document.getElementById("incidentsNote").innerHTML = `<b>Advertencia:</b> ${CONFIG.incidentsNote}`;
+}
+
 try{ loadForecast(); }catch(e){ document.getElementById("calRow").innerHTML = "<div class='loading'>Error al procesar pronóstico: "+e.message+"</div>"; }
 try{ loadClimate(); }catch(e){ document.getElementById("climateBody").innerHTML = "<tr><td colspan='4' class='loading'>Error al procesar histórico: "+e.message+"</td></tr>"; }
+try{ renderIncidents(); }catch(e){ document.getElementById("incidentsBody").innerHTML = "<div class='loading'>Error: "+e.message+"</div>"; }
 </script>
 </body>
 </html>
