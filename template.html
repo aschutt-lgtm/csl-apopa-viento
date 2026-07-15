@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSL Apopa — Panel de Riesgo de Viento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --paper:#EDEBE2;
+    --surface:#F8F7F1;
+    --ink:#23262B;
+    --ink-muted:#5B5F66;
+    --line:#C9C5B7;
+    --amber:#C97A1A;
+    --amber-bg:#F5E4C8;
+    --danger:#B23B2E;
+    --danger-bg:#F3DAD5;
+    --safe:#2F6F5E;
+    --safe-bg:#DCE9E3;
+    --low-bg:#EAE7D6;
+    --mono:'JetBrains Mono', monospace;
+    --disp:'Oswald', sans-serif;
+    --body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--body); line-height:1.5;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 20px 60px;}
+  header.mast{
+    border-bottom:3px solid var(--ink); padding:22px 0 16px;
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px;
+  }
+  .mast h1{
+    font-family:var(--disp); font-weight:700; letter-spacing:0.5px;
+    font-size:26px; margin:0; text-transform:uppercase;
+  }
+  .mast .sub{font-size:13px; color:var(--ink-muted); margin-top:4px;}
+  .mast .owner{font-family:var(--mono); font-size:11px; color:var(--amber); margin-top:6px; text-transform:uppercase; letter-spacing:0.5px;}
+  .mast .meta{text-align:right; font-family:var(--mono); font-size:12px; color:var(--ink-muted);}
+  .eyebrow{
+    font-family:var(--disp); text-transform:uppercase; letter-spacing:1.5px;
+    font-size:12px; color:var(--ink-muted); margin:0 0 8px;
+  }
+  section{margin-top:38px;}
+  .hero{
+    display:grid; grid-template-columns:260px 1fr; gap:28px; align-items:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:24px;
+    margin-top:22px;
+  }
+  @media (max-width:700px){ .hero{grid-template-columns:1fr;} }
+  .gauge-wrap{display:flex; flex-direction:column; align-items:center;}
+  .gauge-read{font-family:var(--mono); font-size:12px; color:var(--ink-muted); margin-top:6px; text-align:center;}
+  .risk-chip{
+    display:inline-block; font-family:var(--disp); text-transform:uppercase;
+    letter-spacing:1px; font-size:13px; padding:5px 14px; border-radius:2px; font-weight:600;
+  }
+  .risk-MINIMAL{background:var(--low-bg); color:var(--ink-muted);}
+  .risk-BAJO{background:var(--safe-bg); color:var(--safe);}
+  .risk-MODERADO{background:var(--amber-bg); color:var(--amber);}
+  .risk-ALTO{background:var(--danger-bg); color:var(--danger);}
+  .risk-CRITICO{background:var(--danger); color:#fff;}
+  .hero-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:18px;}
+  .stat{border-left:2px solid var(--line); padding-left:12px;}
+  .stat .v{font-family:var(--mono); font-size:22px; font-weight:700;}
+  .stat .l{font-size:12px; color:var(--ink-muted); margin-top:2px;}
+  .config-note{
+    border:1px dashed var(--amber); background:var(--amber-bg); border-radius:4px;
+    padding:14px 16px; font-size:13px; color:#5c3d0e; margin-top:16px;
+  }
+  .config-note b{font-family:var(--mono);}
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:22px;
+  }
+  .cal-row{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:8px; margin-top:16px;}
+  .cal-day{
+    border:1px solid var(--line); border-radius:3px; padding:10px 8px; background:#fff; text-align:center;
+  }
+  .cal-day .d{font-family:var(--disp); font-size:12px; text-transform:uppercase; color:var(--ink-muted);}
+  .cal-day .chip{margin:6px 0; font-size:10px;}
+  .cal-day .g{font-family:var(--mono); font-size:15px; font-weight:700;}
+  .cal-day .s{font-family:var(--mono); font-size:11px; color:var(--ink-muted);}
+  table{width:100%; border-collapse:collapse; margin-top:16px; font-size:13px;}
+  th,td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--line);}
+  th:first-child,td:first-child{text-align:left; font-family:var(--disp); text-transform:uppercase; font-size:12px;}
+  th{color:var(--ink-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;}
+  tr.season-hi td:first-child{color:var(--danger);}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--ink-muted);}
+  .legend span.dot{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px;}
+  canvas{max-height:320px;}
+  footer{margin-top:50px; border-top:1px solid var(--line); padding-top:16px; font-size:11px; color:var(--ink-muted); font-family:var(--mono);}
+  .loading{font-family:var(--mono); font-size:12px; color:var(--ink-muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div>
+    <h1>CSL Apopa · Riesgo de viento</h1>
+    <div class="sub">Centro de distribución arrendado a Productos Alimenticios Diana · Apopa, El Salvador</div>
+    <div class="owner">Activo propiedad de Grupo Logístico Mesoamérica, S.A.</div>
+  </div>
+  <div class="meta">
+    13.784° N, -89.195° W<br>
+    <span id="lastUpdate">cargando…</span>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">Estado actual</p>
+  <div class="hero">
+    <div class="gauge-wrap">
+      <svg id="gaugeSvg" width="230" height="150" viewBox="0 0 230 150"></svg>
+      <div class="gauge-read" id="gaugeRead">cargando…</div>
+    </div>
+    <div>
+      <span class="risk-chip" id="riskChip">—</span>
+      <div class="hero-stats">
+        <div class="stat">
+          <div class="v" id="statGustToday">—</div>
+          <div class="l">Ráfaga máx. hoy (km/h)</div>
+        </div>
+        <div class="stat">
+          <div class="v" id="statSustToday">—</div>
+          <div class="l">Viento sostenido máx. hoy (km/h)</div>
+        </div>
+        <div class="stat">
+          <div class="v" id="statPeak10d">—</div>
+          <div class="l">Ráfaga máx. próximos 10 días</div>
+        </div>
+      </div>
+      <div class="config-note" id="configNote"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Pronóstico de ráfagas — próximos 10 días</p>
+  <div class="card">
+    <canvas id="forecastChart"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--ink)"></span>Ráfaga (km/h)</span>
+      <span><span class="dot" style="background:var(--ink-muted)"></span>Viento sostenido (km/h)</span>
+      <span><span class="dot" style="background:var(--danger)"></span>Umbral de diseño de cubierta</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Calendario de riesgo — 10 días</p>
+  <div class="card">
+    <div class="cal-row" id="calRow"><div class="loading">Cargando pronóstico…</div></div>
+    <div class="legend" style="margin-top:18px;">
+      <span><span class="dot" style="background:var(--low-bg); border:1px solid var(--line);"></span>Mínimo · 0 pts</span>
+      <span><span class="dot" style="background:var(--safe-bg)"></span>Bajo · 1 pt</span>
+      <span><span class="dot" style="background:var(--amber-bg)"></span>Moderado · 2-3 pts</span>
+      <span><span class="dot" style="background:var(--danger-bg)"></span>Alto · 4-5 pts</span>
+      <span><span class="dot" style="background:var(--danger)"></span>Crítico · ≥6 pts</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Registro histórico de viento — promedio mensual (2015-2024)</p>
+  <div class="card">
+    <canvas id="climateChart" style="max-height:260px;"></canvas>
+    <table id="climateTable">
+      <thead>
+        <tr><th>Mes</th><th>Sostenido máx (km/h)</th><th>Ráfaga máx (km/h)</th><th>Lluvia (mm)</th></tr>
+      </thead>
+      <tbody id="climateBody"><tr><td colspan="4" class="loading">Cargando histórico…</td></tr></tbody>
+    </table>
+    <div class="legend">
+      <span>⚠ = mes con mayor incidencia histórica de temporales / tormenta tropical en el Pacífico centroamericano</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  CSL Apopa es un activo operado y arrendado por Grupo Logístico Mesoamérica, S.A. (GLM) a Productos Alimenticios Diana ·
+  Fuentes: pronóstico y archivo climático Open-Meteo (ECMWF/ERA5-Land) · 13.784°N, -89.195°W, Apopa, El Salvador ·
+  Alertas regionales oficiales: Dirección General del Observatorio de Amenazas de El Salvador (snet.gob.sv) y NOAA/NHC para sistemas del Pacífico ·
+  Actualización automática diaria vía GitHub Actions · Sin sensor físico en sitio todavía: capa de anemómetro en techo pendiente de instalación.
+</footer>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// DATOS — inyectados en build-time por update_dashboard.py (GitHub Actions)
+// ---------------------------------------------------------------
+const FORECAST_DATA = __FORECAST_JSON__;
+const CLIMATE_DATA = __CLIMATE_JSON__;
+const BUILD_TIMESTAMP = "__BUILD_TIMESTAMP__";
+
+// ---------------------------------------------------------------
+// CONFIGURACIÓN — AJUSTAR AQUÍ cuando se tenga el dato verificado
+// ---------------------------------------------------------------
+const CONFIG = {
+  lat: 13.784,
+  lon: -89.195,
+  timezone: "America/El_Salvador",
+  // Velocidad de diseño de la cubierta actual (km/h, ráfaga sostenida equivalente).
+  // VALOR PLACEHOLDER: reemplazar con el dato del ingeniero estructural / fabricante de lámina.
+  designWindKmh: 130,
+  // Fechas de los 3 percances históricos, para marcarlos en el gráfico una vez se tengan.
+  // Ejemplo: { date: "2025-09-14", label: "Percance 1 - desprendimiento lámina bodega 3" }
+  knownIncidents: []
+};
+
+const monthsEs = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const hiRiskMonths = new Set([4,8,9,10,5]); // may-nov temporada ciclónica pacífico + oct-nov temporales caribe (0-indexed: 4=may,8=sep,9=oct,10=nov,5=jun)
+
+function riskLevel(points){
+  if(points>=6) return {label:"CRÍTICO", cls:"risk-CRITICO"};
+  if(points>=4) return {label:"ALTO", cls:"risk-ALTO"};
+  if(points>=2) return {label:"MODERADO", cls:"risk-MODERADO"};
+  if(points>=1) return {label:"BAJO", cls:"risk-BAJO"};
+  return {label:"MÍNIMO", cls:"risk-MINIMAL"};
+}
+
+function scoreDay(gust, sustained, rain){
+  const t = CONFIG.designWindKmh;
+  let pts = 0;
+  if(gust >= 0.9*t) pts += 3;
+  else if(gust >= 0.75*t) pts += 2;
+  else if(gust >= 0.6*t) pts += 1;
+  if(sustained >= 0.5*t) pts += 1;
+  if(rain >= 20) pts += 1;
+  return pts;
+}
+
+function drawGauge(current, threshold){
+  const svg = document.getElementById("gaugeSvg");
+  const cx=115, cy=130, r=95;
+  const zones = [
+    {frac0:0, frac1:0.46, color:"#2F6F5E"},
+    {frac0:0.46, frac1:0.69, color:"#C97A1A"},
+    {frac0:0.69, frac1:1.0, color:"#B23B2E"}
+  ];
+  const maxScale = threshold*1.25;
+  function angleFor(frac){ return Math.PI - frac*Math.PI; }
+  function pt(cx,cy,r,angle){ return [cx + r*Math.cos(angle), cy - r*Math.sin(angle)]; }
+  let svgStr = "";
+  zones.forEach(z=>{
+    const a0 = angleFor(z.frac0), a1 = angleFor(z.frac1);
+    const [x0,y0] = pt(cx,cy,r,a0);
+    const [x1,y1] = pt(cx,cy,r,a1);
+    svgStr += `<path d="M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}" fill="none" stroke="${z.color}" stroke-width="16"/>`;
+  });
+  // threshold tick
+  const tFrac = threshold/maxScale;
+  const aT = angleFor(tFrac);
+  const [tx0,ty0] = pt(cx,cy,r-14,aT);
+  const [tx1,ty1] = pt(cx,cy,r+10,aT);
+  svgStr += `<line x1="${tx0}" y1="${ty0}" x2="${tx1}" y2="${ty1}" stroke="#23262B" stroke-width="2.5"/>`;
+  // needle
+  const cFrac = Math.min(current/maxScale, 1);
+  const aN = angleFor(cFrac);
+  const [nx,ny] = pt(cx,cy,r-18,aN);
+  svgStr += `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="#23262B" stroke-width="3" stroke-linecap="round"/>`;
+  svgStr += `<circle cx="${cx}" cy="${cy}" r="6" fill="#23262B"/>`;
+  svgStr += `<text x="${cx}" y="${cy+28}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="#5B5F66">0</text>`;
+  svgStr += `<text x="${cx-r-4}" y="${cy+6}" text-anchor="end" font-family="JetBrains Mono" font-size="11" fill="#5B5F66"></text>`;
+  svgStr += `<text x="${cx+r+4}" y="${cy+6}" text-anchor="start" font-family="JetBrains Mono" font-size="11" fill="#5B5F66">${Math.round(maxScale)}</text>`;
+  svg.innerHTML = svgStr;
+}
+
+function loadForecast(){
+  const data = FORECAST_DATA;
+
+  const days = data.daily.time;
+  const gustMax = data.daily.wind_gusts_10m_max;
+  const sustMax = data.daily.wind_speed_10m_max;
+  const rain = data.daily.precipitation_sum;
+
+  // Hero stats
+  document.getElementById("statGustToday").textContent = gustMax[0].toFixed(0);
+  document.getElementById("statSustToday").textContent = sustMax[0].toFixed(0);
+  document.getElementById("statPeak10d").textContent = Math.max(...gustMax).toFixed(0);
+
+  const todayScore = scoreDay(gustMax[0], sustMax[0], rain[0]);
+  const todayRisk = riskLevel(todayScore);
+  const chip = document.getElementById("riskChip");
+  chip.textContent = "Riesgo hoy: " + todayRisk.label;
+  chip.className = "risk-chip " + todayRisk.cls;
+
+  drawGauge(gustMax[0], CONFIG.designWindKmh);
+  document.getElementById("gaugeRead").innerHTML =
+    `${gustMax[0].toFixed(0)} km/h ráfaga hoy<br>umbral de diseño: ${CONFIG.designWindKmh} km/h`;
+
+  document.getElementById("configNote").innerHTML =
+    `<b>Config activa:</b> umbral de diseño de cubierta = ${CONFIG.designWindKmh} km/h (valor de referencia, pendiente de verificar contra la ficha técnica real de la lámina). ` +
+    (CONFIG.knownIncidents.length===0
+      ? `Aún no hay fechas cargadas de los 3 percances — al tenerlas se pueden marcar en el gráfico para calibrar el modelo contra eventos reales.`
+      : `${CONFIG.knownIncidents.length} percance(s) histórico(s) cargado(s) para calibración.`);
+
+  // Forecast chart
+  const labels = days.map(d=>{
+    const dt = new Date(d+"T00:00:00");
+    return dt.toLocaleDateString("es-GT",{weekday:"short", day:"numeric"});
+  });
+  new Chart(document.getElementById("forecastChart"), {
+    type:"bar",
+    data:{
+      labels,
+      datasets:[
+        {label:"Ráfaga máx (km/h)", data:gustMax, backgroundColor:"#23262B"},
+        {label:"Viento sostenido (km/h)", data:sustMax, backgroundColor:"#9A968A", type:"line", borderColor:"#5B5F66", tension:0.3, pointRadius:3},
+        {label:"Umbral de diseño", data:days.map(()=>CONFIG.designWindKmh), type:"line", borderColor:"#B23B2E", borderDash:[6,4], pointRadius:0, borderWidth:2}
+      ]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{ y:{ title:{display:true, text:"km/h"} } }
+    }
+  });
+
+  // Risk calendar
+  const calRow = document.getElementById("calRow");
+  calRow.innerHTML = "";
+  days.forEach((d,i)=>{
+    const pts = scoreDay(gustMax[i], sustMax[i], rain[i]);
+    const rl = riskLevel(pts);
+    const dt = new Date(d+"T00:00:00");
+    const dayCls = rl.cls.replace("risk-","");
+    calRow.innerHTML += `
+      <div class="cal-day">
+        <div class="d">${dt.toLocaleDateString("es-GT",{weekday:"short"})} ${dt.getDate()}</div>
+        <div class="chip risk-chip ${rl.cls}">${rl.label}</div>
+        <div class="g">${gustMax[i].toFixed(0)} km/h</div>
+        <div class="s">sost. ${sustMax[i].toFixed(0)} · lluvia ${rain[i].toFixed(0)}mm</div>
+      </div>`;
+  });
+
+  document.getElementById("lastUpdate").textContent = "Actualizado: " + BUILD_TIMESTAMP;
+}
+
+function loadClimate(){
+  const data = CLIMATE_DATA;
+
+  const time = data.daily.time;
+  const sust = data.daily.wind_speed_10m_max;
+  const gust = data.daily.wind_gusts_10m_max;
+  const rain = data.daily.precipitation_sum;
+
+  const monthly = Array.from({length:12}, ()=>({sustSum:0, gustSum:0, rainSum:0, n:0, gustMax:0}));
+  time.forEach((d,i)=>{
+    const m = new Date(d+"T00:00:00").getMonth();
+    monthly[m].sustSum += sust[i];
+    monthly[m].gustSum += gust[i];
+    monthly[m].rainSum += rain[i];
+    monthly[m].gustMax = Math.max(monthly[m].gustMax, gust[i]);
+    monthly[m].n++;
+  });
+
+  const years = 2024-2015+1;
+  const avgSust = monthly.map(m=>m.sustSum/m.n);
+  const avgGust = monthly.map(m=>m.gustSum/m.n);
+  const avgRain = monthly.map(m=>m.rainSum/years);
+
+  const body = document.getElementById("climateBody");
+  body.innerHTML = "";
+  monthsEs.forEach((name,i)=>{
+    const hi = hiRiskMonths.has(i);
+    body.innerHTML += `<tr class="${hi?'season-hi':''}"><td>${name}${hi?' ⚠':''}</td><td>${avgSust[i].toFixed(1)}</td><td>${avgGust[i].toFixed(1)}</td><td>${avgRain[i].toFixed(0)}</td></tr>`;
+  });
+
+  new Chart(document.getElementById("climateChart"), {
+    type:"bar",
+    data:{
+      labels: monthsEs.map(m=>m.slice(0,3)),
+      datasets:[
+        {label:"Ráfaga máx. promedio", data:avgGust, backgroundColor:"#23262B"},
+        {label:"Sostenido máx. promedio", data:avgSust, backgroundColor:"#C9C5B7"}
+      ]
+    },
+    options:{ scales:{ y:{ title:{display:true, text:"km/h"} } } }
+  });
+}
+
+try{ loadForecast(); }catch(e){ document.getElementById("calRow").innerHTML = "<div class='loading'>Error al procesar pronóstico: "+e.message+"</div>"; }
+try{ loadClimate(); }catch(e){ document.getElementById("climateBody").innerHTML = "<tr><td colspan='4' class='loading'>Error al procesar histórico: "+e.message+"</td></tr>"; }
+</script>
+</body>
+</html>
