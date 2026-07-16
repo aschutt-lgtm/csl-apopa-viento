@@ -197,6 +197,18 @@
     <div class="legend" style="margin-top:4px;">
       <span>🌙 = mayo-noviembre, ventana 6-10pm — horario donde han ocurrido los 3 percances registrados</span>
     </div>
+    <div class="legend" style="margin-top:4px;">
+      <span>⚡ <b>Patrón similar a percances previos</b> = coincide simultáneamente ventana nocturna + viento del cuadrante WNW (260°-330°, el mismo de los 3 eventos reales, promedio 298°) + CAPE ≥1500 J/kg. Es la señal más específica del panel — basada en el patrón real de este sitio, no en un umbral genérico — y suma directamente al puntaje de riesgo del día.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Por qué esa dirección de viento importa</p>
+  <div class="card">
+    <p style="margin-top:0;">El aviso ⚡ del calendario se activa cuando el viento viene del noroeste (260°-330°) — la misma dirección de los 3 percances. Este mapa explica por qué esa dirección específica es la peligrosa:</p>
+    <canvas id="elevChart" style="max-height:260px;"></canvas>
+    <p style="margin-bottom:0;">Al sur está el Volcán de San Salvador, que frena el viento que viene de ahí. Al norte el terreno baja. Pero al noroeste hay un camino largo y plano de más de 20 km sin nada que lo frene antes de llegar a la nave — por eso, cuando la tormenta viene de esa dirección, llega con más fuerza que desde cualquier otro lado.</p>
   </div>
 </section>
 
@@ -319,7 +331,7 @@ function riskLevel(points){
   return {label:"MÍNIMO", cls:"risk-MINIMAL"};
 }
 
-function scoreDay(gust, sustained, rain){
+function scoreDay(gust, sustained, rain, patternMatch){
   const t = CONFIG.designWindKmh;
   let pts = 0;
   if(gust >= 0.9*t) pts += 3;
@@ -327,6 +339,7 @@ function scoreDay(gust, sustained, rain){
   else if(gust >= 0.6*t) pts += 1;
   if(sustained >= 0.5*t) pts += 1;
   if(rain >= 20) pts += 1;
+  if(patternMatch) pts += 2; // coincide con el patron de los 3 percances reales
   return pts;
 }
 
@@ -374,13 +387,16 @@ function loadForecast(){
   const sustMax = data.daily.wind_speed_10m_max;
   const rain = data.daily.precipitation_sum;
   const capeMax = data.daily.cape_max || days.map(()=>null);
+  const patternMatch = data.daily.pattern_match || days.map(()=>false);
+  const nightWindDir = data.daily.night_wind_dir || days.map(()=>null);
+  const nightThunder = data.daily.night_thunder || days.map(()=>false);
 
   // Hero stats
   document.getElementById("statGustToday").textContent = gustMax[0].toFixed(0);
   document.getElementById("statSustToday").textContent = sustMax[0].toFixed(0);
   document.getElementById("statPeak10d").textContent = Math.max(...gustMax).toFixed(0);
 
-  const todayScore = scoreDay(gustMax[0], sustMax[0], rain[0]);
+  const todayScore = scoreDay(gustMax[0], sustMax[0], rain[0], patternMatch[0]);
   const todayRisk = riskLevel(todayScore);
   const chip = document.getElementById("riskChip");
   chip.textContent = "Riesgo hoy: " + todayRisk.label;
@@ -418,7 +434,7 @@ function loadForecast(){
   const calRow = document.getElementById("calRow");
   calRow.innerHTML = "";
   days.forEach((d,i)=>{
-    const pts = scoreDay(gustMax[i], sustMax[i], rain[i]);
+    const pts = scoreDay(gustMax[i], sustMax[i], rain[i], patternMatch[i]);
     const rl = riskLevel(pts);
     const dt = new Date(d+"T00:00:00");
     const isNightWindow = CONFIG.nightWindowMonths.includes(dt.getMonth());
@@ -430,7 +446,7 @@ function loadForecast(){
         <div class="g">${gustMax[i].toFixed(0)} km/h</div>
         <div class="s">sost. ${sustMax[i].toFixed(0)} · lluvia ${rain[i].toFixed(0)}mm</div>
         ${capeInfo ? `<div class="s" style="margin-top:4px;">Convectivo: <span class="chip risk-chip ${capeInfo.cls}" style="padding:1px 6px; font-size:9px;">${capeInfo.label}</span></div>` : ""}
-        ${isNightWindow ? `<div class="s" style="margin-top:4px; color:var(--amber);">🌙 Vigilar ${CONFIG.nightWindowHours}</div>` : ""}
+        ${patternMatch[i] ? `<div class="s" style="margin-top:4px; color:var(--danger); font-weight:700;">⚡ Patrón similar a percances previos (viento ${nightWindDir[i]}°)</div>` : (isNightWindow ? `<div class="s" style="margin-top:4px; color:var(--amber);">🌙 Vigilar ${CONFIG.nightWindowHours}</div>` : "")}
       </div>`;
   });
 
@@ -583,6 +599,37 @@ function checkStaleness(){
     }
   }catch(e){ /* si falla el chequeo, no bloquea el resto del panel */ }
 }
+
+function renderElevationProfile(){
+  // Datos estaticos (no cambian con el clima) - perfil de elevacion cada 2km
+  // desde CSL Apopa en 4 direcciones, via Open-Meteo Elevation API.
+  const dist = [0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30];
+  const wnw = [495,485,502,481,492,454,441,452,420,433,462,472,585,642,691,917];
+  const ese = [495,476,459,588,642,615,714,710,725,455,441,441,441,634,516,582];
+  const n =   [495,432,411,392,440,374,345,339,313,306,295,281,273,265,261,257];
+  const s =   [495,528,595,677,666,659,678,881,974,958,841,476,422,353,371,225];
+  new Chart(document.getElementById("elevChart"), {
+    type:"line",
+    data:{
+      labels: dist,
+      datasets:[
+        {label:"Noroeste (dirección peligrosa)", data:wnw, borderColor:"#B23B2E", backgroundColor:"#B23B2E", borderWidth:3, pointRadius:0, tension:0.3},
+        {label:"Sureste (lado contrario)", data:ese, borderColor:"#C9C5B7", borderWidth:1.5, borderDash:[4,3], pointRadius:0, tension:0.3},
+        {label:"Norte", data:n, borderColor:"#9A968A", borderWidth:1.5, borderDash:[2,2], pointRadius:0, tension:0.3},
+        {label:"Sur (Volcán de San Salvador)", data:s, borderColor:"#5B5F66", borderWidth:1.5, pointRadius:0, tension:0.3}
+      ]
+    },
+    options:{
+      plugins:{legend:{display:true, position:"bottom", labels:{boxWidth:12, font:{size:11}}}},
+      scales:{
+        x:{title:{display:true, text:"Distancia desde CSL Apopa (km)"}},
+        y:{title:{display:true, text:"Elevación (m)"}}
+      }
+    }
+  });
+}
+
+try{ renderElevationProfile(); }catch(e){ /* seccion informativa, no critica */ }
 
 try{ loadForecast(); }catch(e){ document.getElementById("calRow").innerHTML = "<div class='loading'>Error al procesar pronóstico: "+e.message+"</div>"; }
 try{ loadClimate(); }catch(e){ document.getElementById("climateBody").innerHTML = "<tr><td colspan='4' class='loading'>Error al procesar histórico: "+e.message+"</td></tr>"; }
