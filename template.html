@@ -280,16 +280,21 @@ const CONFIG = {
   lon: -89.195,
   timezone: "America/El_Salvador",
   // Velocidad de diseño de la cubierta actual (km/h, ráfaga sostenida equivalente).
-  // VALOR PLACEHOLDER: reemplazar con el dato del ingeniero estructural / fabricante de lámina.
-  designWindKmh: 130,
+  // Valor derivado de la memoria de cálculo estructural real (31-ago-2023): Cz=1.103,
+  // k=1.6 (Zona C), Po=30 kg/m² según Norma Técnica de Diseño por Viento de El Salvador.
+  // PENDIENTE: reemplazar por la resistencia a uplift certificada del fabricante una vez
+  // se confirme el nuevo sistema de engargolado a 180° (medida correctiva en proceso).
+  designWindKmh: 105,
+  designWindNote: "Valor derivado de la memoria de cálculo estructural (31-ago-2023) según la Norma Técnica de Diseño por Viento de El Salvador — no un genérico de industria. Pendiente: la Norma usa un solo coeficiente de succión para toda la cubierta y no distingue zonas de borde/esquina (a diferencia de otras normas internacionales), mientras que los 2 percances de lámina metálica registrados ocurrieron en bordes — es probable que este valor subestime la succión real en esas zonas. Medida correctiva en proceso: conversión del engargolado de 90° a 180° en toda la cubierta. Este valor se actualizará con la resistencia a uplift certificada del nuevo sistema en cuanto el fabricante la confirme. Se recomienda instalar un anemómetro físico en sitio (WeatherFlow Tempest) para obtener el dato real de ráfaga en el techo de CSL Apopa — todo el análisis hasta ahora depende de modelos climáticos o estaciones a kilómetros de distancia, ninguno de los cuales capturó con precisión los tres percances registrados.",
   // Fechas y horas de los 3 percances históricos (hora reportada en sitio), con el dato
   // de viento modelado (ERA5-Land) de esa hora exacta y del pico del día.
   // NOTA: el valor modelado subestima el evento real — ver advertencia en incidentsNote.
   knownIncidents: [
-    { date: "2025-07-18", time: "21:00", gustAtTime: 10.4, gustDayMax: 32.8, dayMaxTime: "12:00" },
-    { date: "2026-06-26", time: "20:00", gustAtTime: 15.5, gustDayMax: 31.0, dayMaxTime: "11:00" },
-    { date: "2026-07-10", time: "19:00", gustAtTime: 7.2,  gustDayMax: 42.8, dayMaxTime: "20:00" }
+    { date: "2025-07-18", time: "21:00", gustAtTime: 10.4, gustDayMax: 32.8, dayMaxTime: "12:00", location: "Lámina metálica, zona de borde" },
+    { date: "2026-06-26", time: "20:00", gustAtTime: 15.5, gustDayMax: 31.0, dayMaxTime: "11:00", location: "Lámina metálica, zona de borde" },
+    { date: "2026-07-10", time: "19:00", gustAtTime: 7.2,  gustDayMax: 42.8, dayMaxTime: "20:00", location: "Tragaluz de policarbonato" }
   ],
+  correctiveMeasure: "Medida correctiva en proceso: conversión del engargolado de lámina metálica de 90° (single lock) a 180° (double lock) en toda la cubierta, tras identificar que ambos percances de lámina ocurrieron en zonas de borde, donde la succión de viento es mayor.",
   incidentsNote: "El modelo ERA5-Land no solo subestima la magnitud de la ráfaga real — en los tres casos tampoco acierta el momento: en la hora exacta reportada el modelo muestra viento casi calmo, mientras que su pico modelado del día ocurrió horas antes (o después). Los tres eventos ocurrieron entre 7pm y 9pm, consistente con maduración nocturna de sistemas convectivos de mesoescala — un patrón regional real y vigilable, distinto de la ráfaga puntual que el modelo no puede resolver.",
   // Meses de mayor incidencia de convección vespertina/nocturna (mayo-noviembre, 0-indexado: 4=may...10=nov)
   nightWindowMonths: [4,5,6,7,8,9,10],
@@ -386,10 +391,7 @@ function loadForecast(){
     `${gustMax[0].toFixed(0)} km/h ráfaga hoy<br>umbral de diseño: ${CONFIG.designWindKmh} km/h`;
 
   document.getElementById("configNote").innerHTML =
-    `<b>Config activa:</b> umbral de diseño de cubierta = ${CONFIG.designWindKmh} km/h (valor de referencia, pendiente de verificar contra la ficha técnica real de la lámina). ` +
-    (CONFIG.knownIncidents.length===0
-      ? `Aún no hay fechas cargadas de los 3 percances — al tenerlas se pueden marcar en el gráfico para calibrar el modelo contra eventos reales.`
-      : `${CONFIG.knownIncidents.length} percance(s) histórico(s) cargado(s) para calibración.`);
+    `<b>Config activa:</b> umbral de diseño de cubierta = ${CONFIG.designWindKmh} km/h. ${CONFIG.designWindNote}`;
 
   // Forecast chart
   const labels = days.map(d=>{
@@ -491,10 +493,10 @@ function renderIncidents(){
     const label = dt.toLocaleDateString("es-GT",{weekday:"long", day:"numeric", month:"long", year:"numeric"});
     return `<div class="incident-row">
       <div class="incident-date">${label.charAt(0).toUpperCase()+label.slice(1)}<br><span style="font-weight:400; color:var(--ink-muted);">${inc.time}</span></div>
-      <div class="incident-vals">Ráfaga modelada a las ${inc.time}: ${inc.gustAtTime} km/h (casi calmo) · Pico modelado del día: ${inc.gustDayMax} km/h a las ${inc.dayMaxTime} (no coincide con la hora reportada)</div>
+      <div class="incident-vals">${inc.location ? `<b>${inc.location}</b><br>` : ""}Ráfaga modelada a las ${inc.time}: ${inc.gustAtTime} km/h (casi calmo) · Pico modelado del día: ${inc.gustDayMax} km/h a las ${inc.dayMaxTime} (no coincide con la hora reportada)</div>
     </div>`;
   }).join("");
-  document.getElementById("incidentsNote").innerHTML = `<b>Advertencia:</b> ${CONFIG.incidentsNote}`;
+  document.getElementById("incidentsNote").innerHTML = `<b>Advertencia:</b> ${CONFIG.incidentsNote}<br><br><b>Estado:</b> ${CONFIG.correctiveMeasure}`;
 }
 
 function loadRecentRecord(){
