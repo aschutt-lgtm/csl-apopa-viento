@@ -192,7 +192,7 @@
       <span><span class="dot" style="background:var(--danger)"></span>Crítico · ≥6 pts</span>
     </div>
     <div class="legend" style="margin-top:8px;">
-      <span><b>Convectivo</b> = potencial de tormenta severa (CAPE) ese día — señal de escala regional, complementaria al puntaje de ráfaga</span>
+      <span><b>Convectivo</b> = potencial de tormenta severa (CAPE) ese día. Alto suma +1 punto y Extremo +2 puntos al riesgo del día — así un día no puede salir "Mínimo" si la atmósfera está muy cargada, aunque el modelo no pronostique ráfaga fuerte todavía.</span>
     </div>
     <div class="legend" style="margin-top:4px;">
       <span>🌙 = mayo-noviembre, ventana 6-10pm — horario donde han ocurrido los 3 percances registrados</span>
@@ -331,7 +331,7 @@ function riskLevel(points){
   return {label:"MÍNIMO", cls:"risk-MINIMAL"};
 }
 
-function scoreDay(gust, sustained, rain, patternMatch){
+function scoreDay(gust, sustained, rain, patternMatch, capeMax){
   const t = CONFIG.designWindKmh;
   let pts = 0;
   if(gust >= 0.9*t) pts += 3;
@@ -340,6 +340,10 @@ function scoreDay(gust, sustained, rain, patternMatch){
   if(sustained >= 0.5*t) pts += 1;
   if(rain >= 20) pts += 1;
   if(patternMatch) pts += 2; // coincide con el patron de los 3 percances reales
+  if(capeMax!=null){
+    if(capeMax >= 4000) pts += 2;       // potencial convectivo Extremo
+    else if(capeMax >= 2500) pts += 1;  // potencial convectivo Alto
+  }
   return pts;
 }
 
@@ -396,7 +400,7 @@ function loadForecast(){
   document.getElementById("statSustToday").textContent = sustMax[0].toFixed(0);
   document.getElementById("statPeak10d").textContent = Math.max(...gustMax).toFixed(0);
 
-  const todayScore = scoreDay(gustMax[0], sustMax[0], rain[0], patternMatch[0]);
+  const todayScore = scoreDay(gustMax[0], sustMax[0], rain[0], patternMatch[0], capeMax[0]);
   const todayRisk = riskLevel(todayScore);
   const chip = document.getElementById("riskChip");
   chip.textContent = "Riesgo hoy: " + todayRisk.label;
@@ -434,7 +438,7 @@ function loadForecast(){
   const calRow = document.getElementById("calRow");
   calRow.innerHTML = "";
   days.forEach((d,i)=>{
-    const pts = scoreDay(gustMax[i], sustMax[i], rain[i], patternMatch[i]);
+    const pts = scoreDay(gustMax[i], sustMax[i], rain[i], patternMatch[i], capeMax[i]);
     const rl = riskLevel(pts);
     const dt = new Date(d+"T00:00:00");
     const isNightWindow = CONFIG.nightWindowMonths.includes(dt.getMonth());
